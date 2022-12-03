@@ -5,15 +5,14 @@ import os
 
 import openpyxl
 
-
 # сегодняшняя дата
 DATE_TODAY = date.today().strftime('%Y-%m-%d') + ' 00:00:00'
-# поля в таблице candidates базы данных personal
-SQL_CAND = 'staff, department, full_name, last_name,	birthday, birth_place, country, series_passport, ' \
+# поля в таблице candidates базы данных candidates
+SQL_CAND = 'staff, department, full_name, last_name, birthday, birth_place, country, series_passport, ' \
            'number_passport, date_given, snils, inn, reg_address, live_address, phone, email, education, ' \
            'check_work_place, check_passport, check_debt, check_bankruptcy, check_bki, check_affiliation, ' \
            'check_internet, check_cronos, check_cross, resume, date_check, officer'
-# поля в таблице registry базы данных personal
+# поля в таблице registry базы данных candidates
 SQL_REG = 'fio, birthday, staff, checks, recruiter, date_in, officer, date_out, result, final_date, url'
 # файл базы данных где находится реестр и результаты проверки
 # CONNECT = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\candidates.db'
@@ -28,6 +27,7 @@ WORK_DIR = r'\\cronosx1\New folder\УВБ\Отдел корпоративной 
 # DESTINATION = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Персонал\Персонал-2\\'
 DESTINATION = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Персонал\Персонал-2\\'
 
+
 class Database:
     """Объявляем класс Database для работы с базой данных"""
 
@@ -36,7 +36,7 @@ class Database:
         self.query = query
         self.value = value
 
-    # функция для записи в БД
+    # метод для записи в БД
     def insert_db(self):
         try:
             with sqlite3.connect(self.database, timeout=5.0) as con:
@@ -47,14 +47,30 @@ class Database:
             print('Ошибка', error)
 
 
+class BackUp:
+    """Объявляем класс BackUp для копирования данных"""
+
+    def __init__(self, cur_dir, dest_dir):
+        self.cur_dir = cur_dir
+        self.dest_dir = dest_dir
+
+    # метод для копирования данных
+    def backup(self):
+        shutil.copy(self.cur_dir, self.dest_dir)
+    # метод для переноса данных
+    def remove(self):
+        shutil.move(self.cur_dir, self.dest_dir)
+
+
 # главный модуль программы
 if __name__ == "__main__":
 
     """Create backup"""
-    # Создаем резервную копию книги Exel в DESTINATION
-    shutil.copy(MAIN_FILE, DESTINATION)
-    # Создаем резервную копию БД в DESTINATION
-    shutil.copy(CONNECT, DESTINATION)
+    # Создаем экземпляры класса BackUp
+    mainfilecopy, databasecopy = BackUp(MAIN_FILE, DESTINATION), BackUp(CONNECT, DESTINATION)
+    # Создаем резервные копии MAIN_FILE, CONNECT
+    mainfilecopy.backup()
+    databasecopy.backup()
 
     """Open Excel file candidates"""
     # открываем книгу MAIN_FILE для чтения и записи данных
@@ -62,8 +78,7 @@ if __name__ == "__main__":
     # Берем первый лист
     ws = wb.worksheets[0]
     # Идет поиск ячеек с датами согласования сегодня, ограничение 30 тыс. строк
-    col_range = ws['K1':'K30000']
-    for cell in col_range:
+    for cell in ws['K1':'K30000']:
         for c in cell:
             # берем номер строки
             row_num = c.row
@@ -75,13 +90,11 @@ if __name__ == "__main__":
                 # Перебираем каталоги в исходной папке
                 for subdir in os.listdir(WORK_DIR):
                     # если имя папки такое же как и значение в ячейке фамилия
-                    if subdir.lower().rstrip() == fio.lower().rstrip():
+                    if subdir.lower().strip() == fio.lower().strip():
                         # ищем в папке файлы Заключение
-                        # for file in os.listdir(f"{WORK_DIR[0:-1] + subdir}\\"):
                         for file in os.listdir(f"{WORK_DIR[0:-1] + subdir}\\"):
                             if file.startswith("Заключение") and file.endswith("xlsm"):
                                 # открываем Заключение для чтения данных
-                                # wbz = openpyxl.load_workbook(os.path.join(WORK_DIR[0:-2], subdir, file), keep_vba=True)
                                 wbz = openpyxl.load_workbook(os.path.join(WORK_DIR, subdir, file), keep_vba=True)
 
                                 """Получаем анкетные данные"""
@@ -138,17 +151,11 @@ if __name__ == "__main__":
                                 # записываем значения
                                 check_dict = {
                                     'check_work_place':
-                                        str(ws2['C11'].value) + ' - ' +
-                                        str(ws2['D11'].value) + '; ' +
-                                        str(ws2['C12'].value) + ' - ' +
-                                        str(ws2['D12'].value) + '; ' +
-                                        str(ws2['C13'].value) + ' - ' +
-                                        str(ws2['D13'].value),
+                                        f"{ws2['C11'].value} - {ws2['D11'].value}; {ws2['C12'].value} - "
+                                        f"{ws2['D12'].value}; {ws2['C13'].value} - {ws2['D13'].value}",
                                     'check_cronos':
-                                        str(ws2['B14'].value) + ': ' +
-                                        str(ws2['C14'].value) + '; ' +
-                                        str(ws2['B15'].value) + ': ' +
-                                        str(ws2['C15'].value),
+                                        f"{ws2['B14'].value}: {ws2['C14'].value}; {ws2['B15'].value}: "
+                                        f"{ws2['C15'].value}",
                                     'check_cross': ws2['C16'].value,
                                     'check_passport': ws2['C17'].value,
                                     'check_debt': ws2['C18'].value,
@@ -164,42 +171,43 @@ if __name__ == "__main__":
                                 wbz.close()
 
                                 # создаем переменную с запросом
-                                insert = f"INSERT INTO candidates ({SQL_CAND}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " \
-                                         f"?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                                insert = "INSERT INTO candidates ({}) VALUES ({}?)".format(SQL_CAND, '?, ' * (
+                                            len(SQL_CAND.split()) - 1))
                                 # создаем переменную со значениями
-                                values = tuple(map(str, [form_dict['staff'], form_dict['department'], 
-                                                        form_dict['full_name'], form_dict['last_name'], 
-                                                        form_dict['birthday'], form_dict['birth_place'], 
-                                                        form_dict['country'], form_dict['series_passport'], 
-                                                        form_dict['number_passport'], form_dict['date_given'], 
-                                                        form_dict['snils'], form_dict['inn'],
-                                                        form_dict['reg_address'], form_dict['live_address'],
-                                                        form_dict['phone'], form_dict['email'], 
-                                                        form_dict['education'], check_dict['check_work_place'], 
-                                                        check_dict['check_passport'], check_dict['check_debt'], 
-                                                        check_dict['check_bankruptcy'], check_dict['check_bki'], 
-                                                        check_dict['check_affiliation'], check_dict['check_internet'], 
-                                                        check_dict['check_cronos'], check_dict['check_cross'], 
-                                                        check_dict['resume'], check_dict['date_check'],
-                                                        check_dict['officer']]))
+                                values = tuple(map(str, [form_dict['staff'], form_dict['department'],
+                                                         form_dict['full_name'], form_dict['last_name'],
+                                                         form_dict['birthday'], form_dict['birth_place'],
+                                                         form_dict['country'], form_dict['series_passport'],
+                                                         form_dict['number_passport'], form_dict['date_given'],
+                                                         form_dict['snils'], form_dict['inn'],
+                                                         form_dict['reg_address'], form_dict['live_address'],
+                                                         form_dict['phone'], form_dict['email'],
+                                                         form_dict['education'], check_dict['check_work_place'],
+                                                         check_dict['check_passport'], check_dict['check_debt'],
+                                                         check_dict['check_bankruptcy'], check_dict['check_bki'],
+                                                         check_dict['check_affiliation'], check_dict['check_internet'],
+                                                         check_dict['check_cronos'], check_dict['check_cross'],
+                                                         check_dict['resume'], check_dict['date_check'],
+                                                         check_dict['officer']
+                                                         ]
+                                                   )
+                                               )
                                 # создаем экземпляр класса Database
                                 candidate = Database(CONNECT, insert, values)
                                 # передаем данные в БД
                                 candidate.insert_db()
-
-                        """Переносим папки в архив"""
-                        # разбираем посимвольно фамилию == имя папки
-                        letter = [i for i in fio]
-                        # создаем ссылку для DESTINATION с первым именем буквы по алфавиту и добавляем ID
-                        hlink = DESTINATION + '\\' + letter[0] + '\\' + subdir + ' - ' + str(ws['A' +
-                                                                                                str(row_num)].value)
-                        # добавляем в файл книги гиперссылку, куда будет помещена папка
+                        """Создание гиперссылок и перемещение папок"""
+                        # Создаем гиперссылку, куда будет помещена папка и добавляем в ячейку файла книги
+                        hlink = f"{DESTINATION}\\{fio[0][0]}\\{subdir} - {ws['A' + str(row_num)].value}"
+                        print(hlink)
                         ws['L' + str(row_num)].hyperlink = hlink
                         # переносим папку из исходной в целевую папку
                         try:
-                            shutil.move(WORK_DIR + subdir, hlink)
+                            workdirectory = BackUp(WORK_DIR + subdir, hlink)
+                            workdirectory.remove()
                         except shutil.Error:
                             continue
+
                 """Получаем данные из реестра кандидатов и формируем запрос в БД"""
                 # берем значения из ячеек, которые соответствуют номеру строки с сегодняшней датой
                 reg_dict = {'fio': ws['B' + str(row_num)].value, 'birthday': ws['C' + str(row_num)].value,
@@ -210,11 +218,12 @@ if __name__ == "__main__":
                             'url': ws['L' + str(row_num)].value
                             }
                 # формируем запрос в таблицу реестр БД
-                insert = f"INSERT INTO registry ({SQL_REG}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                insert = "INSERT INTO registry ({}) VALUES ({}?)".format(SQL_REG, '?, ' * (len(SQL_REG.split()) - 1))
                 values = tuple(map(str, [reg_dict['fio'], reg_dict['birthday'], reg_dict['staff'], reg_dict['checks'],
-                                 reg_dict['recruiter'], reg_dict['date_in'], reg_dict['officer'], reg_dict['date_out'],
-                                 reg_dict['result'], reg_dict['fin_date'], reg_dict['url']]))
-                
+                                         reg_dict['recruiter'], reg_dict['date_in'], reg_dict['officer'],
+                                         reg_dict['date_out'],
+                                         reg_dict['result'], reg_dict['fin_date'], reg_dict['url']]))
+
                 # создаем экземпляр класса Database
                 reg = Database(CONNECT, insert, values)
                 # передаем данные в БД
