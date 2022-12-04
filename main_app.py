@@ -42,7 +42,6 @@ class Database:
             with sqlite3.connect(self.database, timeout=5.0) as con:
                 cur = con.cursor()
                 cur.execute(self.query, self.value)
-                # con.commit()
         except sqlite3.Error as error:
             print('Ошибка', error)
 
@@ -62,7 +61,6 @@ class BackUp:
         shutil.move(self.cur_dir, self.dest_dir)
 
 
-# главный модуль программы
 if __name__ == "__main__":
 
     """Create backup"""
@@ -77,20 +75,22 @@ if __name__ == "__main__":
     wb = openpyxl.load_workbook(MAIN_FILE, keep_vba=True)
     # Берем первый лист
     ws = wb.worksheets[0]
-    # Идет поиск ячеек с датами согласования сегодня, ограничение 30 тыс. строк
-    for cell in ws['K1':'K30000']:
+    # Идет поиск ячеек с датами согласования сегодня, ограничение 20 тыс. строк
+    for cell in ws['K1':'K20000']:
         for c in cell:
-            # берем номер строки
+            # записываем номер строки Excel в переменную
             row_num = c.row
             # главное условие проверки - запись в ячейке равна сегодняшней дате
             if str(c.value) == DATE_TODAY:
                 """ Получаем данные из заключений и формируем из них запрос в БД"""
-                # берем значение с фамилией
+                # получаем значение с фамилией кандидата
                 fio = ws['B' + str(row_num)].value
+                # сразу убираем пробелы в начале и в конце для этой и нижней части исполняемого кода
+                fio.strip()
                 # Перебираем каталоги в исходной папке
                 for subdir in os.listdir(WORK_DIR):
                     # если имя папки такое же как и значение в ячейке фамилия
-                    if subdir.lower().strip() == fio.lower().strip():
+                    if subdir.lower().strip() == fio.lower():
                         # ищем в папке файлы Заключение
                         for file in os.listdir(f"{WORK_DIR[0:-1] + subdir}\\"):
                             if file.startswith("Заключение") and file.endswith("xlsm"):
@@ -197,14 +197,14 @@ if __name__ == "__main__":
                                 # передаем данные в БД
                                 candidate.insert_db()
                         """Создание гиперссылок и перемещение папок"""
-                        # Создаем гиперссылку, куда будет помещена папка и добавляем в ячейку файла книги
+                        # Создаем гиперссылку, куда будет помещена папка и добавляем в стобец L книги
                         hlink = f"{DESTINATION}\\{fio[0][0]}\\{subdir} - {ws['A' + str(row_num)].value}"
-                        print(hlink)
                         ws['L' + str(row_num)].hyperlink = hlink
                         # переносим папку из исходной в целевую папку
                         try:
                             workdirectory = BackUp(WORK_DIR + subdir, hlink)
                             workdirectory.remove()
+                        # если папка уже существует, то пропускаем
                         except shutil.Error:
                             continue
 
@@ -221,9 +221,10 @@ if __name__ == "__main__":
                 insert = "INSERT INTO registry ({}) VALUES ({}?)".format(SQL_REG, '?, ' * (len(SQL_REG.split()) - 1))
                 values = tuple(map(str, [reg_dict['fio'], reg_dict['birthday'], reg_dict['staff'], reg_dict['checks'],
                                          reg_dict['recruiter'], reg_dict['date_in'], reg_dict['officer'],
-                                         reg_dict['date_out'],
-                                         reg_dict['result'], reg_dict['fin_date'], reg_dict['url']]))
-
+                                         reg_dict['date_out'], reg_dict['result'], reg_dict['fin_date'], reg_dict['url']
+                                         ]
+                                   )
+                               )
                 # создаем экземпляр класса Database
                 reg = Database(CONNECT, insert, values)
                 # передаем данные в БД
