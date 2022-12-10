@@ -4,9 +4,8 @@ from datetime import date
 import os
 
 import openpyxl
+from openpyxl import Workbook
 
-# сегодняшняя дата
-DATE_TODAY = date.today().strftime('%Y-%m-%d') + ' 00:00:00'
 # поля в таблице candidates базы данных candidates
 SQL_CAND = 'staff, department, full_name, last_name, birthday, birth_place, country, series_passport, ' \
            'number_passport, date_given, snils, inn, reg_address, live_address, phone, email, education, ' \
@@ -15,17 +14,208 @@ SQL_CAND = 'staff, department, full_name, last_name, birthday, birth_place, coun
 # поля в таблице registry базы данных candidates
 SQL_REG = 'fio, birthday, staff, checks, recruiter, date_in, officer, date_out, result, final_date, url'
 # файл базы данных где находится реестр и результаты проверки
-# CONNECT = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\candidates.db'
-CONNECT = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\candidates.db'
+CONNECT = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\candidates.db'
+# CONNECT = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\candidates.db'
 # главный файл кандидатов
-# MAIN_FILE = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Кандидаты\Кандидаты.xlsm'
-MAIN_FILE = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Кандидаты\Кандидаты.xlsm'
+MAIN_FILE = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Кандидаты\Кандидаты.xlsm'
+# MAIN_FILE = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Кандидаты\Кандидаты.xlsm'
 # рабочая папка кандидатов
-# WORK_DIR = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Кандидаты\\'
-WORK_DIR = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Кандидаты\\'
+WORK_DIR = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Кандидаты\\'
+# WORK_DIR = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Кандидаты\\'
 # место хранения кандидатов
-# DESTINATION = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Персонал\Персонал-2\\'
-DESTINATION = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Персонал\Персонал-2\\'
+DESTINATION = r'C:\Users\ubuntu\Documents\Отдел корпоративной защиты\Персонал\Персонал-2\\'
+# DESTINATION = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Персонал\Персонал-2\\'
+
+
+class BackUp:
+    """Объявляем класс BackUp для копирования данных"""
+
+    def __init__(self, current, destination):
+        self.current = current
+        self.destination = destination
+
+    # метод для копирования данных
+    def backup(self):
+        shutil.copy(self.current, self.destination)
+    # метод для переноса данных
+    def remove(self):
+        shutil.move(self.current, self.destination)
+
+
+class ExcelFile(Workbook):
+    """Объявляем класс ExcelFile для работы с таблицами Excel, наследуем класс Workbook"""
+
+    def __init__(self, excel_file):
+        super().__init__(excel_file)
+        self.worksheet = None
+        self.workbook = openpyxl.load_workbook(excel_file, keep_vba=True)
+
+    # метод для открытия таблиц
+    def open_sheet(self, sheet):
+        self.worksheet = self.workbook.worksheets[sheet]
+        return  self.worksheet
+    
+    # метод для закрытия файла
+    def close_workbook(self):
+        self.workbook.close()
+
+    # метод для сохранения файла
+    def save_workbook(self, excel_file):
+        self.workbook.save(excel_file)
+
+    # метод для разбора ячеек и поиска номера строк по текущей дате
+    def range_row(self):
+        num_row = []
+        for cell in self.worksheet['K5000':'K20000']:
+            for c in cell:
+                if str(c.value) == date.today().strftime('%Y-%m-%d') + ' 00:00:00':
+                    num_row.append(c.row)
+        return num_row
+
+
+class DirSubdir:
+    """Объявляем класс FileDir для работы с файлами"""
+
+    def __init__(self, directory):
+        self.name = None
+        self.subdirectory = None
+        self.directory = directory
+
+    # метод по перебору папок в директории
+    def dir_range(self, name):
+        self.name = name
+        subdirectory = []
+        for s in os.listdir(self.directory):
+            if s.lower().strip() in self.name:
+                subdirectory.append(s)
+        return subdirectory
+
+    # метод по перебору файлов по шаблону, возвращает список путей
+    def file_range(self, subdirectory):
+        self.subdirectory = subdirectory
+        name_path = ''
+        for file_name in os.listdir(self.subdirectory):
+            if file_name.startswith("Заключение") and file_name.endswith("xlsm"):
+                name_path = os.path.join(WORK_DIR, self.subdirectory, file_name)
+        return name_path
+
+
+class HyperLink:
+    """Объявляем класс HyperLink для создания и записи гиперссылок"""
+
+    def __init__(self):
+        self.num_rom = row_num
+        self.subdir = subdir
+        self.ws = ws
+
+    # метод создает гиперссылки, записывает в книгу и создает словарь: подпапка = путь
+    def create_link(self):
+        h_link = {}
+        for nums in self.num_rom:
+            if str(self.ws['B' + str(nums)].value) in self.subdir:
+                sbd = self.ws['B' + str(nums)].value.strip()
+                lnk = f"{DESTINATION}\\{sbd[0][0]}\\{sbd} - {self.ws['A' + str(nums)].value}"
+                ws['L' + str(nums)].hyperlink = lnk
+                h_link[sbd] = lnk
+        return h_link
+
+class Forms:
+    """Объявляем класс Forms для работы с данными"""
+    
+    def __init__(self):
+        self.form_reg = None
+        self.form_view = None
+        self.form_check = None
+        self.cand_values = None
+        self.val_reg = None
+
+    # анкетные данные
+    def view_form(self, staff, department, full_name, last_name, birthday, birth_place, country, series_passport,
+                  number_passport, date_given, snils, inn, reg_address, live_address, phone, email, education):
+        self.form_view = {'staff':staff,
+                        'department': department,
+                        'full_name': full_name,
+                        'last_name': last_name,
+                        'birthday':birthday,
+                        'birth_place': birth_place,
+                        'country': country,
+                        'series_passport': series_passport,
+                        'number_passport': number_passport,
+                        'date_given': date_given,
+                        'snils': snils,
+                        'inn': inn,
+                        'reg_address': reg_address,
+                        'live_address': live_address,
+                        'phone': phone,
+                        'email': email,
+                        'education': education
+                        }
+        return self.form_view
+
+    # данные заключения
+    def check_form(self,check_work_place, check_cronos, check_cross, check_passport, check_debt, check_bankruptcy,
+                   check_bki, check_affiliation, check_internet, resume, date_check, officer):
+        self.form_check = {'check_work_place': check_work_place,
+                            'check_cronos': check_cronos,
+                            'check_cross': check_cross,
+                            'check_passport': check_passport,
+                            'check_debt': check_debt,
+                            'check_bankruptcy': check_bankruptcy,
+                            'check_bki': check_bki,
+                            'check_affiliation': check_affiliation,
+                            'check_internet': check_internet,
+                            'resume': resume,
+                            'date_check': date_check,
+                            'officer': officer
+                            }
+        return self.form_check
+
+        # данные запроса на вставку данных кандидатов
+    def cand_values_form(self):
+        self.cand_values = tuple(map(str, [self.form_view['staff'], self.form_view['department'],
+                                    self.form_view['full_name'], self.form_view['last_name'],
+                                    self.form_view['birthday'], self.form_view['birth_place'],
+                                    self.form_view['country'], self.form_view['series_passport'],
+                                    self.form_view['number_passport'], self.form_view['date_given'],
+                                    self.form_view['snils'], self.form_view['inn'],
+                                    self.form_view['reg_address'], self.form_view['live_address'],
+                                    self.form_view['phone'], self.form_view['email'],
+                                    self.form_view['education'], self.form_check['check_work_place'],
+                                    self.form_check['check_passport'], self.form_check['check_debt'],
+                                    self.form_check['check_bankruptcy'], self.form_check['check_bki'],
+                                    self.form_check['check_affiliation'], self.form_check['check_internet'],
+                                    self.form_check['check_cronos'], self.form_check['check_cross'],
+                                    self.form_check['resume'], self.form_check['date_check'],
+                                    self.form_check['officer']]
+                                     )
+                                 )
+        return self.cand_values
+
+    # данные реестра
+    def reg_form(self, fio, birthday, staff, checks, recruiter, date_in, officer, date_out, result, fin_date, url):
+        self.form_reg = {'fio': fio,
+                         'birthday': birthday,
+                         'staff': staff,
+                         'checks': checks,
+                         'recruiter': recruiter,
+                         'date_in': date_in,
+                         'officer': officer,
+                         'date_out': date_out,
+                         'result': result,
+                         'fin_date': fin_date,
+                         'url': url
+                         }
+        return self.form_reg
+
+    # данные запроса на вставку данных реестра
+    def reg_values_form(self):
+        self.val_reg = tuple(map(str, [self.form_reg['fio'], self.form_reg['birthday'], self.form_reg['staff'],
+                                       self.form_reg['checks'], self.form_reg['recruiter'], self.form_reg['date_in'],
+                                       self.form_reg['officer'], self.form_reg['date_out'], self.form_reg['result'],
+                                       self.form_reg['fin_date'], self.form_reg['url']]
+                                 )
+                             )
+        return self.val_reg
 
 
 class Database:
@@ -44,191 +234,95 @@ class Database:
                 cur.execute(self.query, self.value)
         except sqlite3.Error as error:
             print('Ошибка', error)
-
-
-class BackUp:
-    """Объявляем класс BackUp для копирования данных"""
-
-    def __init__(self, cur_dir, dest_dir):
-        self.cur_dir = cur_dir
-        self.dest_dir = dest_dir
-
-    # метод для копирования данных
-    def backup(self):
-        shutil.copy(self.cur_dir, self.dest_dir)
-    # метод для переноса данных
-    def remove(self):
-        shutil.move(self.cur_dir, self.dest_dir)
-
-
+            
+            
+# запуск программы
 if __name__ == "__main__":
-
     """Create backup"""
     # Создаем экземпляры класса BackUp
-    mainfilecopy, databasecopy = BackUp(MAIN_FILE, DESTINATION), BackUp(CONNECT, DESTINATION)
+    main_file_copy, database_copy = BackUp(MAIN_FILE, DESTINATION), BackUp(CONNECT, DESTINATION)
     # Создаем резервные копии MAIN_FILE, CONNECT
-    mainfilecopy.backup()
-    databasecopy.backup()
+    main_file_copy.backup()
+    database_copy.backup()
+    # открываем первый лист книги MAIN_FILE для чтения и записи данных
+    wb = ExcelFile(MAIN_FILE)
+    ws = wb.open_sheet(0)
+    # Создаем список ячеек с датами согласования сегодня, ограничение 20 тыс. строк
+    row_num = wb.range_row()
+    # Создаем список ячеек фамилией кандидата и убираем пробелы в начале и в конце
+    fio = [ws['B' + str(i)].value.strip().lower() for i in row_num]
+    # Перебираем каталоги в исходной папке
+    search = DirSubdir(WORK_DIR)
+    subdir = search.dir_range(fio)
+    # Создаем список файлов Заключений, очищаем от пустых значений
+    files = [search.file_range(f"{WORK_DIR[0:-1] + i}\\") for i in subdir]
+    path_files = list(filter(None, files))
+    # открываем Заключения для чтения данных
+    for path in path_files:
+        wbz = ExcelFile(path)
+        """Получаем анкетные данные"""
+        form = Forms()
+        # проверяем количество листов в книге, если больше 1 и на 2-м листе есть данные
+        if len(wbz.sheetnames) > 1 and str(wbz.worksheets[1]['K1'].value) == 'ФИО':
+            print(str(wbz.worksheets[1]['K1'].value))
+            wsz = wbz.open_sheet(1)
+            form_view = form.view_form(wsz['C3'].value, wsz['D3'].value, wsz['K3'].value, wsz['S3'].value,
+                                       wsz['L3'].value, wsz['M3'].value, wsz['T3'].value, wsz['P3'].value,
+                                       wsz['Q3'].value, wsz['R3'].value, wsz['U3'].value, wsz['V3'].value,
+                                       wsz['N3'].value, wsz['O3'].value, wsz['Y3'].value, wsz['Z3'].value,
+                                       wsz['X3'].value)
+        # если лист с анкетой отсутствует или на листе нет данных берем данные из заключения
+        elif len(wbz.sheetnames) < 2 or (len(wbz.sheetnames) > 1 and
+                                         str(wbz.worksheets[1]['K1'].value) != 'ФИО'):
+            wsz = wbz.open_sheet(0)
+            form_view = form.view_form(wsz['C4'].value, wsz['C5'].value, wsz['C6'].value, wsz['C7'].value,
+                                       wsz['C8'].value, 'None', 'None', wsz['C9'].value, wsz['D9'].value,
+                                       wsz['E9'].value, 'None', wsz['C10'].value, 'None', 'None', 'None', 
+                                       'None', 'None')
+        """Получаем данные проверки"""
+        # открываем первый лист с заключением и записываем значения
+        wsz = wbz.open_sheet(0)
+        form_check = form.check_form(f"{wsz['C11'].value} - {wsz['D11'].value}; {wsz['C12'].value} - "
+                                    f"{wsz['D12'].value}; {wsz['C13'].value} - {wsz['D13'].value}",
+                                    f"{wsz['B14'].value}: {wsz['C14'].value}; {wsz['B15'].value}: {wsz['C15'].value}",
+                                    wsz['C16'].value, wsz['C17'].value, wsz['C18'].value, wsz['C19'].value,
+                                     wsz['C20'].value, wsz['C21'].value, wsz['C22'].value, wsz['C23'].value,
+                                     wsz['C24'].value, wsz['C25'].value)
+        # Закрываем книгу Excel
+        wbz.close_workbook()
+        # создаем переменные с запросом и со значениями
+        ins_cand = "INSERT INTO candidates ({}) VALUES ({}?)".format(SQL_CAND, '?, ' * (
+                    len(SQL_CAND.split()) - 1))
+        val_cand = form.cand_values_form()
+        # создаем экземпляр класса Database и передаем данные в БД
+        candidate = Database(CONNECT, ins_cand, val_cand)
+        candidate.insert_db()
 
-    """Open Excel file candidates"""
-    # открываем книгу MAIN_FILE для чтения и записи данных
-    wb = openpyxl.load_workbook(MAIN_FILE, keep_vba=True)
-    # Берем первый лист
-    ws = wb.worksheets[0]
-    # Идет поиск ячеек с датами согласования сегодня, ограничение 20 тыс. строк
-    for cell in ws['K1':'K20000']:
-        for c in cell:
-            # записываем номер строки Excel в переменную
-            row_num = c.row
-            # главное условие проверки - запись в ячейке равна сегодняшней дате
-            if str(c.value) == DATE_TODAY:
-                """ Получаем данные из заключений и формируем из них запрос в БД"""
-                # получаем значение с фамилией кандидата
-                fio = ws['B' + str(row_num)].value
-                # сразу убираем пробелы в начале и в конце для этой и нижней части исполняемого кода
-                fio.strip()
-                # Перебираем каталоги в исходной папке
-                for subdir in os.listdir(WORK_DIR):
-                    # если имя папки такое же как и значение в ячейке фамилия
-                    if subdir.lower().strip() == fio.lower():
-                        # ищем в папке файлы Заключение
-                        for file in os.listdir(f"{WORK_DIR[0:-1] + subdir}\\"):
-                            if file.startswith("Заключение") and file.endswith("xlsm"):
-                                # открываем Заключение для чтения данных
-                                wbz = openpyxl.load_workbook(os.path.join(WORK_DIR, subdir, file), keep_vba=True)
+    """Создание гиперссылок и перемещение папок"""
+    # Создаем гиперссылку, куда будет помещена папка и добавляем в ячейку файла книги
+    links = HyperLink()
+    hlink = links.create_link()
+    # переносим папку из исходной в целевую папку, итерируем словарь k - подпапка, v - путь
+    for k, v in hlink:
+        try:
+            work_directory = BackUp(WORK_DIR + k, v)
+            work_directory.remove()
+        except shutil.Error:
+            print('Ошибка при переносе данных')
 
-                                """Получаем анкетные данные"""
-                                form_dict = {}
-                                # проверяем количество листов в книге, если больше 1 и на 2-м листе есть данные
-                                if len(wbz.sheetnames) > 1 and str(wbz.worksheets[1]['K1'].value) == 'ФИО':
-                                    # Берем второй лист
-                                    ws1 = wbz.worksheets[1]
-                                    # записываем значения
-                                    form_dict = {'staff': ws1['C3'].value,
-                                                 'department': ws1['D3'].value,
-                                                 'full_name': ws1['K3'].value,
-                                                 'last_name': ws1['S3'].value,
-                                                 'birthday': ws1['L3'].value,
-                                                 'birth_place': ws1['M3'].value,
-                                                 'country': ws1['T3'].value,
-                                                 'series_passport': ws1['P3'].value,
-                                                 'number_passport': ws1['Q3'].value,
-                                                 'date_given': ws1['R3'].value,
-                                                 'snils': ws1['U3'].value,
-                                                 'inn': ws1['V3'].value,
-                                                 'reg_address': ws1['N3'].value,
-                                                 'live_address': ws1['O3'].value,
-                                                 'phone': ws1['Y3'].value,
-                                                 'email': ws1['Z3'].value,
-                                                 'education': ws1['X3'].value
-                                                 }
-                                # если лист с анкетой отсутствует или на листе нет данных берем данные из заключения
-                                elif len(wbz.sheetnames) < 2 or (len(wbz.sheetnames) > 1 and
-                                                                 str(wbz.worksheets[1]['K1'].value) != 'ФИО'):
-                                    ws2 = wbz.worksheets[0]
-                                    form_dict = {'staff': ws2['C4'].value,
-                                                 'department': ws2['C5'].value,
-                                                 'full_name': ws2['C6'].value,
-                                                 'last_name': ws2['C7'].value,
-                                                 'birthday': ws2['C8'].value,
-                                                 'birth_place': 'None',
-                                                 'country': 'None',
-                                                 'series_passport': ws2['C9'].value,
-                                                 'number_passport': ws2['D9'].value,
-                                                 'date_given': ws2['E9'].value,
-                                                 'snils': 'None',
-                                                 'inn': ws2['C10'].value,
-                                                 'reg_address': 'None',
-                                                 'live_address': 'None',
-                                                 'phone': 'None',
-                                                 'email': 'None',
-                                                 'education': 'None'
-                                                 }
-
-                                """Получаем данные проверки"""
-                                # открываем первый лист с заключением
-                                ws2 = wbz.worksheets[0]
-                                # записываем значения
-                                check_dict = {
-                                    'check_work_place':
-                                        f"{ws2['C11'].value} - {ws2['D11'].value}; {ws2['C12'].value} - "
-                                        f"{ws2['D12'].value}; {ws2['C13'].value} - {ws2['D13'].value}",
-                                    'check_cronos':
-                                        f"{ws2['B14'].value}: {ws2['C14'].value}; {ws2['B15'].value}: "
-                                        f"{ws2['C15'].value}",
-                                    'check_cross': ws2['C16'].value,
-                                    'check_passport': ws2['C17'].value,
-                                    'check_debt': ws2['C18'].value,
-                                    'check_bankruptcy': ws2['C19'].value,
-                                    'check_bki': ws2['C20'].value,
-                                    'check_affiliation': ws2['C21'].value,
-                                    'check_internet': ws2['C22'].value,
-                                    'resume': ws2['C23'].value,
-                                    'date_check': ws2['C24'].value,
-                                    'officer': ws2['C25'].value,
-                                }
-                                # Закрываем книгу Excel
-                                wbz.close()
-
-                                # создаем переменную с запросом
-                                insert = "INSERT INTO candidates ({}) VALUES ({}?)".format(SQL_CAND, '?, ' * (
-                                            len(SQL_CAND.split()) - 1))
-                                # создаем переменную со значениями
-                                values = tuple(map(str, [form_dict['staff'], form_dict['department'],
-                                                         form_dict['full_name'], form_dict['last_name'],
-                                                         form_dict['birthday'], form_dict['birth_place'],
-                                                         form_dict['country'], form_dict['series_passport'],
-                                                         form_dict['number_passport'], form_dict['date_given'],
-                                                         form_dict['snils'], form_dict['inn'],
-                                                         form_dict['reg_address'], form_dict['live_address'],
-                                                         form_dict['phone'], form_dict['email'],
-                                                         form_dict['education'], check_dict['check_work_place'],
-                                                         check_dict['check_passport'], check_dict['check_debt'],
-                                                         check_dict['check_bankruptcy'], check_dict['check_bki'],
-                                                         check_dict['check_affiliation'], check_dict['check_internet'],
-                                                         check_dict['check_cronos'], check_dict['check_cross'],
-                                                         check_dict['resume'], check_dict['date_check'],
-                                                         check_dict['officer']
-                                                         ]
-                                                   )
-                                               )
-                                # создаем экземпляр класса Database
-                                candidate = Database(CONNECT, insert, values)
-                                # передаем данные в БД
-                                candidate.insert_db()
-                        """Создание гиперссылок и перемещение папок"""
-                        # Создаем гиперссылку, куда будет помещена папка и добавляем в стобец L книги
-                        hlink = f"{DESTINATION}\\{fio[0][0]}\\{subdir} - {ws['A' + str(row_num)].value}"
-                        ws['L' + str(row_num)].hyperlink = hlink
-                        # переносим папку из исходной в целевую папку
-                        try:
-                            workdirectory = BackUp(WORK_DIR + subdir, hlink)
-                            workdirectory.remove()
-                        # если папка уже существует, то пропускаем
-                        except shutil.Error:
-                            continue
-
-                """Получаем данные из реестра кандидатов и формируем запрос в БД"""
-                # берем значения из ячеек, которые соответствуют номеру строки с сегодняшней датой
-                reg_dict = {'fio': ws['B' + str(row_num)].value, 'birthday': ws['C' + str(row_num)].value,
-                            'staff': ws['D' + str(row_num)].value, 'checks': ws['E' + str(row_num)].value,
-                            'recruiter': ws['F' + str(row_num)].value, 'date_in': ws['G' + str(row_num)].value,
-                            'officer': ws['H' + str(row_num)].value, 'date_out': ws['I' + str(row_num)].value,
-                            'result': ws['J' + str(row_num)].value, 'fin_date': ws['K' + str(row_num)].value,
-                            'url': ws['L' + str(row_num)].value
-                            }
-                # формируем запрос в таблицу реестр БД
-                insert = "INSERT INTO registry ({}) VALUES ({}?)".format(SQL_REG, '?, ' * (len(SQL_REG.split()) - 1))
-                values = tuple(map(str, [reg_dict['fio'], reg_dict['birthday'], reg_dict['staff'], reg_dict['checks'],
-                                         reg_dict['recruiter'], reg_dict['date_in'], reg_dict['officer'],
-                                         reg_dict['date_out'], reg_dict['result'], reg_dict['fin_date'], reg_dict['url']
-                                         ]
-                                   )
-                               )
-                # создаем экземпляр класса Database
-                reg = Database(CONNECT, insert, values)
-                # передаем данные в БД
-                reg.insert_db()
-
+    """Получаем данные из реестра кандидатов и формируем запрос в БД"""
+    # берем значения из ячеек, которые соответствуют номеру строки с сегодняшней датой
+    regs = Forms()
+    for num in row_num:
+        regs.reg_form(ws['B' + str(num)].value, ws['C' + str(num)].value, ws['D' + str(num)].value,
+                      ws['E' + str(num)].value, ws['F' + str(num)].value, ws['G' + str(num)].value,
+                      ws['H' + str(num)].value, ws['I' + str(num)].value, ws['J' + str(num)].value,
+                      ws['K' + str(num)].value, ws['L' + str(num)].value)
+        # формируем запрос в таблицу реестр БД
+        ins_reg = "INSERT INTO registry ({}) VALUES ({}?)".format(SQL_REG, '?, ' * (len(SQL_REG.split()) - 1))
+        val_reg = regs.reg_values_form()
+        # создаем экземпляр класса Database и передаем данные в БД
+        reg = Database(CONNECT, ins_reg, val_reg)
+        reg.insert_db()
     # Сохраняем книгу Excel
-    wb.save(MAIN_FILE)
+    wb.save_workbook(MAIN_FILE)
