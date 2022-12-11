@@ -1,10 +1,12 @@
 import shutil
 import sqlite3
+import sys
 from datetime import date
 import os
 
 import openpyxl
 from openpyxl import Workbook
+
 
 # поля в таблице candidates базы данных candidates
 SQL_CAND = 'staff, department, full_name, last_name, birthday, birth_place, country, series_passport, ' \
@@ -27,6 +29,24 @@ DESTINATION = r'C:\Users\ubuntu\Documents\Отдел корпоративной 
 # DESTINATION = r'\\cronosx1\New folder\УВБ\Отдел корпоративной защиты\Персонал\Персонал-2\\'
 
 
+class Database:
+    """Объявляем класс Database для работы с базой данных"""
+
+    def __init__(self, database, query, value):
+        self.database = database
+        self.query = query
+        self.value = value
+
+    # метод для записи в БД
+    def insert_db(self):
+        with sqlite3.connect(self.database, timeout=5.0) as con:
+            cur = con.cursor()
+            if type(self.value) is tuple:   # построчная запись в БД
+                cur.execute(self.query, self.value)
+            elif type(self.value) is list:  # групповая запись в БД
+                cur.executemany(self.query, self.value)
+
+
 class BackUp:
     """Объявляем класс BackUp для копирования данных"""
 
@@ -37,6 +57,7 @@ class BackUp:
     # метод для копирования данных
     def backup(self):
         shutil.copy(self.current, self.destination)
+
     # метод для переноса данных
     def remove(self):
         shutil.move(self.current, self.destination)
@@ -47,14 +68,15 @@ class ExcelFile(Workbook):
 
     def __init__(self, excel_file):
         super().__init__(excel_file)
+        self.num_row = None
         self.worksheet = None
-        self.workbook = openpyxl.load_workbook(excel_file, keep_vba=True)
+        self.workbook = openpyxl.load_workbook(excel_file, keep_vba=True, read_only=False)
 
     # метод для открытия таблиц
     def open_sheet(self, sheet):
         self.worksheet = self.workbook.worksheets[sheet]
         return  self.worksheet
-    
+
     # метод для закрытия файла
     def close_workbook(self):
         self.workbook.close()
@@ -65,12 +87,21 @@ class ExcelFile(Workbook):
 
     # метод для разбора ячеек и поиска номера строк по текущей дате
     def range_row(self):
-        num_row = []
+        self.num_row = []
         for cell in self.worksheet['K5000':'K20000']:
             for c in cell:
                 if str(c.value) == date.today().strftime('%Y-%m-%d') + ' 00:00:00':
-                    num_row.append(c.row)
-        return num_row
+                    self.num_row.append(c.row)
+        if len(self.num_row) == 0:  # если список пустой - выходим из программы
+            sys.exit()
+        return self.num_row
+
+    # метод записи значений строк, соответствующих номеру строки
+    def reg_range(self):
+        reg_val = []
+        for n in self.num_row:
+            reg_val.append(tuple(map(str, [c.value for cell in ws['B' + str(n):'L' + str(n)] for c in cell])))
+        return reg_val
 
 
 class DirSubdir:
@@ -88,9 +119,11 @@ class DirSubdir:
         for s in os.listdir(self.directory):
             if s.lower().strip() in self.name:
                 subdirectory.append(s)
+        if len(subdirectory) == 0:  # если список пустой - выходим из программы
+            sys.exit()
         return subdirectory
 
-    # метод по перебору файлов по шаблону, возвращает список путей
+    # метод по перебору файлов по шаблону
     def file_range(self, subdirectory):
         self.subdirectory = subdirectory
         name_path = ''
@@ -108,69 +141,51 @@ class HyperLink:
         self.subdir = subdir
         self.ws = ws
 
-    # метод создает гиперссылки, записывает в книгу и создает словарь: подпапка = путь
+    # метод создает гиперссылки
     def create_link(self):
         h_link = {}
         for nums in self.num_rom:
             if str(self.ws['B' + str(nums)].value) in self.subdir:
                 sbd = self.ws['B' + str(nums)].value.strip()
-                lnk = f"{DESTINATION}\\{sbd[0][0]}\\{sbd} - {self.ws['A' + str(nums)].value}"
-                ws['L' + str(nums)].hyperlink = lnk
-                h_link[sbd] = lnk
+                lnk = f"{DESTINATION + sbd[0][0]}\\{sbd} - {self.ws['A' + str(nums)].value}"
+                self.ws['L' + str(nums)].hyperlink = lnk    # записывает в книгу
+                h_link[sbd] = lnk   # создает словарь: подпапка = путь
         return h_link
 
 class Forms:
     """Объявляем класс Forms для работы с данными"""
     
     def __init__(self):
-        self.form_reg = None
         self.form_view = None
         self.form_check = None
         self.cand_values = None
-        self.val_reg = None
 
     # анкетные данные
     def view_form(self, staff, department, full_name, last_name, birthday, birth_place, country, series_passport,
                   number_passport, date_given, snils, inn, reg_address, live_address, phone, email, education):
-        self.form_view = {'staff':staff,
-                        'department': department,
-                        'full_name': full_name,
-                        'last_name': last_name,
-                        'birthday':birthday,
-                        'birth_place': birth_place,
-                        'country': country,
-                        'series_passport': series_passport,
-                        'number_passport': number_passport,
-                        'date_given': date_given,
-                        'snils': snils,
-                        'inn': inn,
-                        'reg_address': reg_address,
-                        'live_address': live_address,
-                        'phone': phone,
-                        'email': email,
-                        'education': education
+
+        self.form_view = {'staff':staff, 'department': department, 'full_name': full_name,
+                          'last_name': last_name, 'birthday':birthday, 'birth_place': birth_place,
+                          'country': country, 'series_passport': series_passport, 'number_passport': number_passport,
+                          'date_given': date_given, 'snils': snils, 'inn': inn,
+                          'reg_address': reg_address, 'live_address': live_address, 'phone': phone,
+                          'email': email, 'education': education
                         }
         return self.form_view
 
     # данные заключения
     def check_form(self,check_work_place, check_cronos, check_cross, check_passport, check_debt, check_bankruptcy,
                    check_bki, check_affiliation, check_internet, resume, date_check, officer):
-        self.form_check = {'check_work_place': check_work_place,
-                            'check_cronos': check_cronos,
-                            'check_cross': check_cross,
-                            'check_passport': check_passport,
-                            'check_debt': check_debt,
-                            'check_bankruptcy': check_bankruptcy,
-                            'check_bki': check_bki,
-                            'check_affiliation': check_affiliation,
-                            'check_internet': check_internet,
-                            'resume': resume,
-                            'date_check': date_check,
-                            'officer': officer
+        self.form_check = {'check_work_place': check_work_place, 'check_cronos': check_cronos,
+                            'check_cross': check_cross, 'check_passport': check_passport,
+                            'check_debt': check_debt, 'check_bankruptcy': check_bankruptcy,
+                            'check_bki': check_bki, 'check_affiliation': check_affiliation,
+                            'check_internet': check_internet, 'resume': resume,
+                            'date_check': date_check, 'officer': officer
                             }
         return self.form_check
 
-        # данные запроса на вставку данных кандидатов
+    # данные запроса на вставку данных кандидатов
     def cand_values_form(self):
         self.cand_values = tuple(map(str, [self.form_view['staff'], self.form_view['department'],
                                     self.form_view['full_name'], self.form_view['last_name'],
@@ -191,57 +206,12 @@ class Forms:
                                  )
         return self.cand_values
 
-    # данные реестра
-    def reg_form(self, fio, birthday, staff, checks, recruiter, date_in, officer, date_out, result, fin_date, url):
-        self.form_reg = {'fio': fio,
-                         'birthday': birthday,
-                         'staff': staff,
-                         'checks': checks,
-                         'recruiter': recruiter,
-                         'date_in': date_in,
-                         'officer': officer,
-                         'date_out': date_out,
-                         'result': result,
-                         'fin_date': fin_date,
-                         'url': url
-                         }
-        return self.form_reg
-
-    # данные запроса на вставку данных реестра
-    def reg_values_form(self):
-        self.val_reg = tuple(map(str, [self.form_reg['fio'], self.form_reg['birthday'], self.form_reg['staff'],
-                                       self.form_reg['checks'], self.form_reg['recruiter'], self.form_reg['date_in'],
-                                       self.form_reg['officer'], self.form_reg['date_out'], self.form_reg['result'],
-                                       self.form_reg['fin_date'], self.form_reg['url']]
-                                 )
-                             )
-        return self.val_reg
-
-
-class Database:
-    """Объявляем класс Database для работы с базой данных"""
-
-    def __init__(self, database, query, value):
-        self.database = database
-        self.query = query
-        self.value = value
-
-    # метод для записи в БД
-    def insert_db(self):
-        try:
-            with sqlite3.connect(self.database, timeout=5.0) as con:
-                cur = con.cursor()
-                cur.execute(self.query, self.value)
-        except sqlite3.Error as error:
-            print('Ошибка', error)
-            
             
 # запуск программы
 if __name__ == "__main__":
     """Create backup"""
-    # Создаем экземпляры класса BackUp
+    # Создаем экземпляры класса BackUp и резервные копии MAIN_FILE, CONNECT
     main_file_copy, database_copy = BackUp(MAIN_FILE, DESTINATION), BackUp(CONNECT, DESTINATION)
-    # Создаем резервные копии MAIN_FILE, CONNECT
     main_file_copy.backup()
     database_copy.backup()
     # открываем первый лист книги MAIN_FILE для чтения и записи данных
@@ -249,7 +219,7 @@ if __name__ == "__main__":
     ws = wb.open_sheet(0)
     # Создаем список ячеек с датами согласования сегодня, ограничение 20 тыс. строк
     row_num = wb.range_row()
-    # Создаем список ячеек фамилией кандидата и убираем пробелы в начале и в конце
+    # Создаем список ячеек с фамилией кандидата и убираем пробелы в начале и в конце
     fio = [ws['B' + str(i)].value.strip().lower() for i in row_num]
     # Перебираем каталоги в исходной папке
     search = DirSubdir(WORK_DIR)
@@ -257,14 +227,12 @@ if __name__ == "__main__":
     # Создаем список файлов Заключений, очищаем от пустых значений
     files = [search.file_range(f"{WORK_DIR[0:-1] + i}\\") for i in subdir]
     path_files = list(filter(None, files))
+    form = Forms()  # создаем экземпляр класса для анкетных данных и заключений
     # открываем Заключения для чтения данных
     for path in path_files:
         wbz = ExcelFile(path)
-        """Получаем анкетные данные"""
-        form = Forms()
         # проверяем количество листов в книге, если больше 1 и на 2-м листе есть данные
         if len(wbz.sheetnames) > 1 and str(wbz.worksheets[1]['K1'].value) == 'ФИО':
-            print(str(wbz.worksheets[1]['K1'].value))
             wsz = wbz.open_sheet(1)
             form_view = form.view_form(wsz['C3'].value, wsz['D3'].value, wsz['K3'].value, wsz['S3'].value,
                                        wsz['L3'].value, wsz['M3'].value, wsz['T3'].value, wsz['P3'].value,
@@ -279,8 +247,7 @@ if __name__ == "__main__":
                                        wsz['C8'].value, 'None', 'None', wsz['C9'].value, wsz['D9'].value,
                                        wsz['E9'].value, 'None', wsz['C10'].value, 'None', 'None', 'None', 
                                        'None', 'None')
-        """Получаем данные проверки"""
-        # открываем первый лист с заключением и записываем значения
+        # Получаем данные из заключений и записываем значения
         wsz = wbz.open_sheet(0)
         form_check = form.check_form(f"{wsz['C11'].value} - {wsz['D11'].value}; {wsz['C12'].value} - "
                                     f"{wsz['D12'].value}; {wsz['C13'].value} - {wsz['D13'].value}",
@@ -291,38 +258,29 @@ if __name__ == "__main__":
         # Закрываем книгу Excel
         wbz.close_workbook()
         # создаем переменные с запросом и со значениями
-        ins_cand = "INSERT INTO candidates ({}) VALUES ({}?)".format(SQL_CAND, '?, ' * (
-                    len(SQL_CAND.split()) - 1))
+        ins_cand = "INSERT INTO candidates ({}) VALUES ({}?)".format(SQL_CAND, '?, ' * (len(SQL_CAND.split()) - 1))
         val_cand = form.cand_values_form()
         # создаем экземпляр класса Database и передаем данные в БД
         candidate = Database(CONNECT, ins_cand, val_cand)
         candidate.insert_db()
 
-    """Создание гиперссылок и перемещение папок"""
-    # Создаем гиперссылку, куда будет помещена папка и добавляем в ячейку файла книги
+    # Создание гиперссылок и перемещение папок
     links = HyperLink()
     hlink = links.create_link()
-    # переносим папку из исходной в целевую папку, итерируем словарь k - подпапка, v - путь
-    for k, v in hlink:
+    # переносим папку из исходной в целевую папку
+    for k, v in hlink.items():
         try:
             work_directory = BackUp(WORK_DIR + k, v)
             work_directory.remove()
         except shutil.Error:
             print('Ошибка при переносе данных')
 
-    """Получаем данные из реестра кандидатов и формируем запрос в БД"""
-    # берем значения из ячеек, которые соответствуют номеру строки с сегодняшней датой
-    regs = Forms()
-    for num in row_num:
-        regs.reg_form(ws['B' + str(num)].value, ws['C' + str(num)].value, ws['D' + str(num)].value,
-                      ws['E' + str(num)].value, ws['F' + str(num)].value, ws['G' + str(num)].value,
-                      ws['H' + str(num)].value, ws['I' + str(num)].value, ws['J' + str(num)].value,
-                      ws['K' + str(num)].value, ws['L' + str(num)].value)
-        # формируем запрос в таблицу реестр БД
-        ins_reg = "INSERT INTO registry ({}) VALUES ({}?)".format(SQL_REG, '?, ' * (len(SQL_REG.split()) - 1))
-        val_reg = regs.reg_values_form()
-        # создаем экземпляр класса Database и передаем данные в БД
-        reg = Database(CONNECT, ins_reg, val_reg)
-        reg.insert_db()
+    # Получаем данные из реестра кандидатов и формируем запрос в БД
+    ins_reg = "INSERT INTO registry ({}) VALUES ({}?)".format(SQL_REG, '?, ' * (len(SQL_REG.split()) - 1))
+    val_reg = wb.reg_range()
+    # создаем экземпляр класса Database и передаем данные в БД
+    reg = Database(CONNECT, ins_reg, val_reg)
+    reg.insert_db()
+
     # Сохраняем книгу Excel
     wb.save_workbook(MAIN_FILE)
